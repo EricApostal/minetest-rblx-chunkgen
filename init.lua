@@ -1,8 +1,12 @@
-local http = minetest.request_http_api()
+local ie = minetest.request_insecure_environment()
+ie.package.path = ie.package.path .. ";/home/eric/.luarocks/share/lua/5.1/?.lua;/home/eric/.luarocks/share/lua/5.1/?/init.lua"
+ie.package.cpath = ie.package.cpath .. ";/home/eric/.luarocks/lib64/lua/5.1/?.so"
 
-minetest.log("Started!")
+local request = ie.require("http.request")
+local pegasus = ie.require('pegasus')
 
-local function getChunk(x, y)
+local function getChunk(x, y, callback)
+    minetest.log("running from getchunk")
     local chunkData = {}
 
     local pos_min = vector.new(x * 16, 0, y * 16)
@@ -37,11 +41,8 @@ local function getChunk(x, y)
                 end
             end
         end
-        minetest.log("Length: " .. len)
-        for k,v in pairs(http) do
-            minetest.log(k)
-        end
-        -- Now we can send the request back and whatnot
+        minetest.log("Running callback for response")
+        callback()
     end
     minetest.emerge_area(pos_min, pos_max, runGetChunkThing)
 end
@@ -54,7 +55,17 @@ minetest.register_chatcommand("cc", {
         local player = minetest.get_player_by_name(name)
         local pos = player:get_pos()
         -- getChunk(math.floor(pos.x / 16), math.floor(pos.z / 16))
-        getChunk(1000, 1000)
+        getChunk(1000, 1000, function() minetest.log("called!") end)
+    end,
+})
+
+minetest.register_chatcommand("host", {
+    privs = {
+        interact = true,
+    },
+    func = function(name, param)
+        
+        
     end,
 })
 
