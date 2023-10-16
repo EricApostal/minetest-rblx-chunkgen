@@ -1,5 +1,6 @@
-minetest.log("Started!")
+local http = minetest.request_http_api()
 
+minetest.log("Started!")
 
 local function getChunk(x, y)
     local chunkData = {}
@@ -37,8 +38,10 @@ local function getChunk(x, y)
             end
         end
         minetest.log("Length: " .. len)
+        for k,v in pairs(http) do
+            minetest.log(k)
+        end
         -- Now we can send the request back and whatnot
-
     end
     minetest.emerge_area(pos_min, pos_max, runGetChunkThing)
 end
