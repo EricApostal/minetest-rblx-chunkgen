@@ -4,7 +4,8 @@
 
 -- local request = ie.require("http.request")
 -- local pegasus = ie.require('pegasus')
-local currPath = "/home/eric/.minetest/mods/minetest_rblx_chunkgen"
+-- local currPath = "/home/eric/.minetest/mods/minetest_rblx_chunkgen"
+local currPath = "/home/ubuntu/.minetest/mods/minetest_rblx_chunkgen"
 
 local function getChunk(x, y, callback)
     local chunkData = {}
@@ -72,12 +73,12 @@ function split(inputstr, sep)
     return t
 end
 
-
 local function checkRequests()
-    if io.popen("ls -pa "..currPath.."/requests".. "| grep -v /") == nil then
+    local _pending = io.popen("ls -pa "..currPath.."/requests".. "| grep -v /")
+    if _pending == nil then
         return
     end
-    local pending = io.popen("ls -pa "..currPath.."/requests".. "| grep -v /"):lines()
+    local pending = _pending:lines()
     for file in pending do
         local split = split(file:gsub(".txt",""), ",")
         local x = tonumber(split[1])
