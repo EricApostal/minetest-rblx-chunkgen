@@ -5,7 +5,7 @@ local currPath = "/home/ubuntu/.minetest/mods/rblx_chunkgen"
 print("started chunkgen bridge")
 
 local function getChunk(x, y, callback)
-    print("running getChunk()!")
+    print("Running getChunk!")
     local chunkData = {}
 
     local pos_min = vector.new(x * 16, 0, y * 16)
@@ -35,8 +35,6 @@ local function getChunk(x, y, callback)
                         if not (blockType == "air") then
                             local blockData = {x=x, y=y, z=z, t=blockType:gsub("default:", "")}
                             table.insert(chunkData, blockData)
-                            -- local blockHash = x..","..y..","..z
-                            -- chunkData[blockHash] = blockData
                         end
                     end
                 end
@@ -45,6 +43,22 @@ local function getChunk(x, y, callback)
         callback(chunkData)
         end
     minetest.emerge_area(pos_min, pos_max, runGetChunkThing)
+end
+
+local function getBulkChunks(hashes)
+    local chunks = {}
+    local length = #hashes
+
+    for _, hash in ipairs(hashes) do
+        local x = tonumber(split(hash, ",")[1])
+        local y = tonumber(split(hash, ",")[2])
+        getChunk(x,y,function(blocks)
+            chunks[hash] = blocks
+            if (length == #chunks) then
+                -- send network request
+            end
+        end)
+    end
 end
 
 minetest.register_chatcommand("cc", {
@@ -71,7 +85,7 @@ function split(inputstr, sep)
 end
 
 local openThreads = 0
-local pollThreadCount = 1
+local pollThreadCount = 10
 local function checkRequests()
     if (openThreads >= pollThreadCount ) then
         return
@@ -84,15 +98,10 @@ local function checkRequests()
         timeout = 10000,
         method = "GET",
     }
-    minetest.log("sending get...")
+    minetest.log("Sending GET...")
     http.fetch(GETRequest, function(data)
-        minetest.log("get returned!")
+        minetest.log("GET returned!")
         local hash = data["data"]
-        print("Full Return: ")
-        print(dump(data))
-        print("Got hash: "..hash)
-        print("Split: ")
-        print(dump(split(hash, ",")))
         local x = tonumber(split(hash, ",")[1])
         local y = tonumber(split(hash, ",")[2])
 
@@ -101,10 +110,9 @@ local function checkRequests()
                 url="http://localhost:8080/local/sendrequest",
                 timeout = 10000,
                 method = "POST",
-                data = minetest.write_json({hash=hash, blocks=blocks}),
+                data = minetest.write_json({type="chunk", hash=hash, blocks=blocks}),
                 extra_headers = {"Content-Type: application/json"}
             }
-            print("GetChunk called, sending POST...")
             http.fetch(POSTRequest, function(ret)
                 print("POST returned: ")
                 print(ret)
