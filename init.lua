@@ -1,19 +1,15 @@
--- local ie = minetest.request_insecure_environment()
--- ie.package.path = ie.package.path .. ";/home/eric/.luarocks/share/lua/5.1/?.lua;/home/eric/.luarocks/share/lua/5.1/?/init.lua"
--- ie.package.cpath = ie.package.cpath .. ";/home/eric/.luarocks/lib64/lua/5.1/?.so"
+local ie = minetest.request_insecure_environment()
+local http = minetest.request_http_api()
+local currPath = "/home/ubuntu/.minetest/mods/rblx_chunkgen"
 
--- local request = ie.require("http.request")
--- local pegasus = ie.require('pegasus')
--- local currPath = "/home/eric/.minetest/mods/minetest_rblx_chunkgen"
-local currPath = "/home/ubuntu/.minetest/mods/minetest_rblx_chunkgen"
+print("started chunkgen bridge")
 
 local function getChunk(x, y, callback)
+    print("running getChunk()!")
     local chunkData = {}
 
     local pos_min = vector.new(x * 16, 0, y * 16)
     local pos_max = vector.new(x * 16 + 15, 256, y * 16 + 15)
-
-    local len = 0
 
     local iters = 0
     local function runGetChunkThing()
@@ -22,6 +18,7 @@ local function getChunk(x, y, callback)
         if iters < 17 then
             return
         end
+        minetest.log("Iterations: "..iters)
 
         local voxelmanip = minetest.get_voxel_manip(pos_min, pos_max)
         local emin, emax = voxelmanip:read_from_map(pos_min, pos_max)
@@ -36,10 +33,10 @@ local function getChunk(x, y, callback)
                     else
                         local blockType = minetest.get_name_from_content_id(data[area:index(x, y, z)])
                         if not (blockType == "air") then
-                            local blockData = {x=x, y=y, z=z, bType=blockType}
-                            local blockHash = x..","..y..","..z
-                            chunkData[blockHash] = blockData
-                            len = len + 1
+                            local blockData = {x=x, y=y, z=z, t=blockType:gsub("default:", "")}
+                            table.insert(chunkData, blockData)
+                            -- local blockHash = x..","..y..","..z
+                            -- chunkData[blockHash] = blockData
                         end
                     end
                 end
@@ -73,24 +70,49 @@ function split(inputstr, sep)
     return t
 end
 
+local openThreads = 0
+local pollThreadCount = 1
 local function checkRequests()
-    local _pending = io.popen("ls -pa "..currPath.."/requests".. "| grep -v /")
-    if _pending == nil then
+    if (openThreads >= pollThreadCount ) then
+        minetest.log("Ignoring out of scope thread")
         return
     end
-    local pending = _pending:lines()
-    for file in pending do
-        local split = split(file:gsub(".txt",""), ",")
-        local x = tonumber(split[1])
-        local y = tonumber(split[2])
-        getChunk(x,y,function(chunkData)
-            file = io.open(currPath.."/responses/"..split[1]..","..split[2]..".txt", "w")
-            io.output(file)
-            io.write(minetest.write_json(chunkData))
-            io.close(file)
-            os.remove(currPath.."/requests/"..split[1]..","..split[2]..".txt")
+    openThreads = openThreads + 1
+    minetest.log("Checking requests...")
+    -- Use Long Poll to wait for hash, then do request
+    local GETRequest = {
+        url="http://localhost:8080/local/recieverequest",
+        timeout = 10000,
+        method = "GET",
+    }
+    minetest.log("sending get...")
+    http.fetch(GETRequest, function(data)
+        minetest.log("get returned!")
+        local hash = data["data"]
+        print("Full Return: ")
+        print(dump(data))
+        print("Got hash: "..hash)
+        print("Split: ")
+        print(dump(split(hash, ",")))
+        local x = tonumber(split(hash, ",")[1])
+        local y = tonumber(split(hash, ",")[2])
+
+        getChunk(x,y,function(blocks)
+            local POSTRequest = {
+                url="http://localhost:8080/local/sendrequest",
+                timeout = 10000,
+                method = "POST",
+                data = minetest.write_json({hash=hash, blocks=blocks}),
+                extra_headers = {"Content-Type: application/json"}
+            }
+            print("GetChunk called, sending POST...")
+            http.fetch(POSTRequest, function(ret)
+                print("POST returned: ")
+                print(ret)
+            end)
         end)
-    end
+        openThreads = openThreads - 1
+    end)
 end
 
 minetest.register_chatcommand("host", {
@@ -98,8 +120,6 @@ minetest.register_chatcommand("host", {
         interact = true,
     },
     func = function(name, param)
-        os.execute("mkdir "..currPath.."/requests")
-        os.execute("mkdir "..currPath.."/responses")
         checkRequests()
     end,
 })
@@ -115,6 +135,12 @@ minetest.register_chatcommand("pos", {
     end,
 })
 
+local stepBuffer = 50
+local current = 0
 minetest.register_globalstep(function()
-    checkRequests()
+    if ((current % stepBuffer) == 0) then
+        checkRequests()
+        current = 0
+    end
+    current = current + 1
 end)
