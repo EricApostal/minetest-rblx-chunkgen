@@ -74,7 +74,6 @@ local openThreads = 0
 local pollThreadCount = 1
 local function checkRequests()
     if (openThreads >= pollThreadCount ) then
-        minetest.log("Ignoring out of scope thread")
         return
     end
     openThreads = openThreads + 1
@@ -135,7 +134,7 @@ minetest.register_chatcommand("pos", {
     end,
 })
 
-local stepBuffer = 50
+local stepBuffer = 5
 local current = 0
 minetest.register_globalstep(function()
     if ((current % stepBuffer) == 0) then
