@@ -45,7 +45,7 @@ local function getChunk(x, y, callback)
     minetest.emerge_area(pos_min, pos_max, runGetChunkThing)
 end
 
-local function getBulkChunks(hashes)
+local function getBulkChunks(bulkId, hashes)
     local chunks = {}
     local length = #hashes
 
@@ -55,23 +55,21 @@ local function getBulkChunks(hashes)
         getChunk(x,y,function(blocks)
             chunks[hash] = blocks
             if (length == #chunks) then
-                -- send network request
+                local POSTRequest = {
+                    url="http://localhost:8080/local/sendrequest",
+                    timeout = 10,
+                    method = "POST",
+                    data = minetest.write_json({type="bulk", bulkId=bulkId, hash=hash, blocks=blocks}),
+                    extra_headers = {"Content-Type: application/json"}
+                }
+                minetest.log("[Callback] BULK Chunk data grabbed, sending POST back to server.")
+                http.fetch(POSTRequest, function(ret)
+                    minetest.log("POST returned!")
+                end)
             end
         end)
     end
 end
-
-minetest.register_chatcommand("cc", {
-    privs = {
-        interact = true,
-    },
-    func = function(name, param)
-        local player = minetest.get_player_by_name(name)
-        local pos = player:get_pos()
-        -- getChunk(math.floor(pos.x / 16), math.floor(pos.z / 16))
-        getChunk(1000, 1000, function() minetest.log("called!") end)
-    end,
-})
 
 function split(inputstr, sep)
     if sep == nil then
@@ -85,7 +83,7 @@ function split(inputstr, sep)
 end
 
 local openThreads = 0
-local pollThreadCount = 10
+local pollThreadCount = 1
 local function checkRequests()
     if (openThreads >= pollThreadCount ) then
         return
@@ -94,8 +92,8 @@ local function checkRequests()
     minetest.log("Checking requests...")
     -- Use Long Poll to wait for hash, then do request
     local GETRequest = {
-        url="http://localhost:8080/local/recieverequest",
-        timeout = 10000,
+        url="http://localhost:8080/local/recieverequest?id="..openThreads.."&maxThreads="..pollThreadCount,
+        timeout = 10,
         method = "GET",
     }
     minetest.log("Sending GET...")
@@ -108,28 +106,20 @@ local function checkRequests()
         getChunk(x,y,function(blocks)
             local POSTRequest = {
                 url="http://localhost:8080/local/sendrequest",
-                timeout = 10000,
+                timeout = 10,
                 method = "POST",
                 data = minetest.write_json({type="chunk", hash=hash, blocks=blocks}),
                 extra_headers = {"Content-Type: application/json"}
             }
+            minetest.log("[Callback] Chunk data grabbed, sending POST back to server.")
             http.fetch(POSTRequest, function(ret)
-                print("POST returned: ")
-                print(ret)
+                minetest.log("POST returned!")
             end)
+            minetest.log("sent post request!")
         end)
         openThreads = openThreads - 1
     end)
 end
-
-minetest.register_chatcommand("host", {
-    privs = {
-        interact = true,
-    },
-    func = function(name, param)
-        checkRequests()
-    end,
-})
 
 minetest.register_chatcommand("pos", {
     privs = {
@@ -142,7 +132,7 @@ minetest.register_chatcommand("pos", {
     end,
 })
 
-local stepBuffer = 5
+local stepBuffer = 1
 local current = 0
 minetest.register_globalstep(function()
     if ((current % stepBuffer) == 0) then
