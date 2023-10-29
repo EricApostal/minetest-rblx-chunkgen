@@ -123,6 +123,16 @@ local function checkRequests()
     http.fetch(GETRequest, function(data)
         minetest.log("GET returned!")
         local hash = data["data"]
+        minetest.log("data: ")
+        minetest.log(dump(data))
+
+        if (data["timeout"]) then
+            -- For some reason the request timed out, so we should just try again.
+            minetest.log("Request timed out, trying again.")
+            openThreads = openThreads - 1
+            return
+        end
+
         local isbulk = true
 
         local x = tonumber(split(hash, ",")[1])
@@ -136,7 +146,7 @@ local function checkRequests()
             getChunk(x,y,function(blocks)
                 local POSTRequest = {
                     url="http://localhost:8080/local/sendrequest",
-                    timeout = 10,
+                    timeout = 1000000000000,
                     method = "POST",
                     data = minetest.write_json({type="chunk", hash=hash, blocks=blocks}),
                     extra_headers = {"Content-Type: application/json"}
