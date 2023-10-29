@@ -4,6 +4,22 @@ local currPath = "/home/ubuntu/.minetest/mods/rblx_chunkgen"
 
 print("started chunkgen bridge")
 
+--[[
+    We can create an array that has all of the pending chunk requests, scoped outside of getChunk.
+    If every item of the current bulk request is in the array, we can send the request.
+    Otherwise, don't send the callback.
+
+    Wait, even easier. We have an array in the GET method. We then modify the callback to add to the array,
+    for all but the last chunk that needs to be generated. The callback for the last chunk will add the item,
+    but then send *every* chunk as a poll request.
+
+    Problem: Because getting chunks is async, we can't guarantee that the last chunk will be the last one *generated*
+    Solution: We can use a counter to count the number of chunks that have been generated, and then send the request
+    when the counter is equal to the number of chunks in the bulk request.
+
+    So essentially just check the length of the array in every callback.
+]]
+
 local function getChunk(x, y, callback)
     print("Running getChunk!")
     local chunkData = {}
@@ -51,13 +67,17 @@ end
 local function getBulkChunks(bulkId, hashes)
     local chunks = {}
     local length = #hashes
+    local currLength = 0
 
     for _, hash in ipairs(hashes) do
         local x = tonumber(split(hash, ",")[1])
         local y = tonumber(split(hash, ",")[2])
         getChunk(x,y,function(blocks)
             chunks[hash] = blocks
-            if (length == #chunks) then
+            minetest.log("callback responded...")
+            currLength = currLength + 1
+            if (length == currLength) then
+                minetest.log("At desired length, sending post...")
                 local POSTRequest = {
                     url="http://localhost:8080/local/sendrequest",
                     timeout = 10,
@@ -103,24 +123,35 @@ local function checkRequests()
     http.fetch(GETRequest, function(data)
         minetest.log("GET returned!")
         local hash = data["data"]
+        local isbulk = true
+
         local x = tonumber(split(hash, ",")[1])
         local y = tonumber(split(hash, ",")[2])
-        minetest.log("Now we need to handle chunk groups. bulkId: ")
-        minetest.log(  minetest.parse_json(data["data"])["bulkId"])
-        getChunk(x,y,function(blocks)
-            local POSTRequest = {
-                url="http://localhost:8080/local/sendrequest",
-                timeout = 10,
-                method = "POST",
-                data = minetest.write_json({type="chunk", hash=hash, blocks=blocks}),
-                extra_headers = {"Content-Type: application/json"}
-            }
-            minetest.log("[Callback] Chunk data grabbed, sending POST back to server.")
-            http.fetch(POSTRequest, function(ret)
-                minetest.log("POST returned!")
+        if type(minetest.parse_json(data["data"])) == "number" then
+            isbulk = false
+        end
+        -- 
+        if (not isbulk) then
+            minetest.log("bulkId is nil, sending chunk request.")
+            getChunk(x,y,function(blocks)
+                local POSTRequest = {
+                    url="http://localhost:8080/local/sendrequest",
+                    timeout = 10,
+                    method = "POST",
+                    data = minetest.write_json({type="chunk", hash=hash, blocks=blocks}),
+                    extra_headers = {"Content-Type: application/json"}
+                }
+                minetest.log("[Callback] Chunk data grabbed, sending POST back to server.")
+                http.fetch(POSTRequest, function(ret)
+                    minetest.log("POST returned!")
+                end)
+                minetest.log("sent post request!")
             end)
-            minetest.log("sent post request!")
-        end)
+        else
+            local bulkId = minetest.parse_json(data["data"])["bulkId"]
+            minetest.log("bulkId is not nil, sending bulk chunk request.")
+            getBulkChunks(bulkId, minetest.parse_json(data["data"])["chunks"])
+        end
         openThreads = openThreads - 1
     end)
 end

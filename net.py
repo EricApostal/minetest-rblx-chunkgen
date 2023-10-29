@@ -16,21 +16,21 @@ responses = {}
 def _getChunk(hash):
     print(f"added hash {hash} to queue, waiting for response...")
     queue.insert(0,hash)
-    while hash not in responses:
+    while not hash in responses.keys():
         time.sleep(0.01)
 
-    print(f"got response for hash {hash}")
     return responses.pop(hash)
 
 def _getChunkGroup(bulkId, chunks):
     print(f"added chunk group to queue, waiting for response...")
-    print(responses)
-    chunkData = {"bulkId": bulkId, "blocks": chunks}
+    print(type(bulkId))
+    chunkData = {"bulkId": str(bulkId), "chunks": chunks}
     queue.insert(0,chunkData)
-    while not bulkId in responses:
+    while not str(bulkId) in responses.keys():
         time.sleep(0.01)
         
-    return responses.pop(bulkId)
+    print("found bulk id in responses!")
+    return responses.pop(str(bulkId))
 
 # For minetest mod to long poll
 @app.route('/local/recieverequest')
@@ -65,7 +65,11 @@ def sendRequest():
     if data["type"] == "chunk":
         responses[data["hash"]] = data["blocks"]
     else:
+        print("Is bulk id, so placing into bulk id dict")
+        print(type(data["bulkId"]))
         responses[data["bulkId"]] = data
+        print("responses: ")
+        print(responses.keys())
     return "OK"
 
 @app.route('/chunk')
