@@ -158,9 +158,11 @@ local function checkRequests()
                 minetest.log("sent post request!")
             end)
         else
-            local bulkId = minetest.parse_json(data["data"])["bulkId"]
-            minetest.log("bulkId is not nil, sending bulk chunk request.")
-            getBulkChunks(bulkId, minetest.parse_json(data["data"])["chunks"])
+            if (minetest.parse_json(data["data"])) then
+                local bulkId = minetest.parse_json(data["data"])["bulkId"]
+                minetest.log("bulkId is not nil, sending bulk chunk request.")
+                getBulkChunks(bulkId, minetest.parse_json(data["data"])["chunks"])
+            end
         end
         openThreads = openThreads - 1
     end)
