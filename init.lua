@@ -7,7 +7,10 @@ print("started chunkgen bridge")
 local function getChunk(x, y, callback)
     print("Running getChunk!")
     local chunkData = {}
-
+    if (not x) or (not y) then
+        minetest.log("Tried to get chunk with nil x or y!")
+        return
+    end
     local pos_min = vector.new(x * 16, 0, y * 16)
     local pos_max = vector.new(x * 16 + 15, 256, y * 16 + 15)
 
@@ -93,7 +96,7 @@ local function checkRequests()
     -- Use Long Poll to wait for hash, then do request
     local GETRequest = {
         url="http://localhost:8080/local/recieverequest?id="..openThreads.."&maxThreads="..pollThreadCount,
-        timeout = 10,
+        timeout = 1000000000000,
         method = "GET",
     }
     minetest.log("Sending GET...")
@@ -102,7 +105,8 @@ local function checkRequests()
         local hash = data["data"]
         local x = tonumber(split(hash, ",")[1])
         local y = tonumber(split(hash, ",")[2])
-
+        minetest.log("Now we need to handle chunk groups. bulkId: ")
+        minetest.log(  minetest.parse_json(data["data"])["bulkId"])
         getChunk(x,y,function(blocks)
             local POSTRequest = {
                 url="http://localhost:8080/local/sendrequest",

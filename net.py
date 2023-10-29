@@ -24,9 +24,10 @@ def _getChunk(hash):
 
 def _getChunkGroup(bulkId, chunks):
     print(f"added chunk group to queue, waiting for response...")
-    chunkData = {"bulkId":bulkId, "blocks":chunks}
+    print(responses)
+    chunkData = {"bulkId": bulkId, "blocks": chunks}
     queue.insert(0,chunkData)
-    while not responses[bulkId]:
+    while not bulkId in responses:
         time.sleep(0.01)
         
     return responses.pop(bulkId)
@@ -80,6 +81,7 @@ def getChunk():
 def getChunkGroup():
     chunksIn = request.args.getlist("chunk")    
     key = uuid.uuid4()
+    print(chunksIn)
     return _getChunkGroup(key, chunksIn)
 
 if __name__ == '__main__':
